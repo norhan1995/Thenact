@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="820" viewBox="0 0 1400 820">
+  <rect width="1400" height="820" fill="#0b0d10"/>
+  <style>
+    .t{font-family:Inter,Segoe UI,Arial,sans-serif;fill:#f4f6f8}.m{font-family:Inter,Segoe UI,Arial,sans-serif;fill:#a0a8b2}
+    .h{font-size:42px;font-weight:800}.s{font-size:18px}.b{font-size:22px;font-weight:700}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:16px}
+    .box{fill:#14171c;stroke:#363c46;stroke-width:2}.blue{stroke:#59beff}.green{stroke:#a6ff1f}.red{stroke:#d63a36}
+  </style>
+  <text x="70" y="72" class="t h">THEN<tspan fill="#a6ff1f">ACT</tspan></text>
+  <text x="70" y="108" class="m s">Architecture snapshot · Decision control plane for autonomous systems</text>
+  <line x1="70" y1="138" x2="1330" y2="138" stroke="#363c46" stroke-width="2"/>
+
+  <rect x="70" y="210" rx="18" ry="18" width="240" height="150" class="box blue"/>
+  <text x="95" y="250" class="t b">Natural-language intent</text>
+  <text x="95" y="287" class="m s">AI proposer interprets</text>
+  <text x="95" y="318" class="m s">explicit facts only</text>
+
+  <text x="330" y="295" class="m h">→</text>
+
+  <rect x="390" y="210" rx="18" ry="18" width="250" height="150" class="box blue"/>
+  <text x="415" y="250" class="t b">Structured proposal</text>
+  <text x="415" y="287" class="m s">Validated + normalized</text>
+  <text x="415" y="318" class="m s">model boundary</text>
+
+  <text x="660" y="295" class="m h">→</text>
+
+  <rect x="720" y="175" rx="18" ry="18" width="330" height="230" class="box green"/>
+  <text x="748" y="218" class="t b">THENACT DETERMINISTIC GATE</text>
+  <text x="748" y="258" class="m s">1. Hard policy</text>
+  <text x="748" y="288" class="m s">2. Evidence freshness</text>
+  <text x="748" y="318" class="m s">3. Missing information</text>
+  <text x="748" y="348" class="m s">4. Authority</text>
+  <text x="748" y="378" class="m s">5. Risk + reversibility</text>
+  <text x="748" y="408" class="m s">6. Confidence</text>
+
+  <text x="1070" y="295" class="m h">→</text>
+
+  <rect x="1130" y="210" rx="18" ry="18" width="200" height="150" class="box green"/>
+  <text x="1155" y="250" class="t b">EXECUTE</text>
+  <text x="1155" y="287" class="m s">Execution adapter</text>
+  <text x="1155" y="318" class="m s">may write state</text>
+
+  <line x1="885" y1="405" x2="885" y2="485" stroke="#d63a36" stroke-width="3"/>
+  <polygon points="885,495 876,480 894,480" fill="#d63a36"/>
+  <rect x="720" y="505" rx="18" ry="18" width="330" height="118" class="box red"/>
+  <text x="748" y="548" class="t b">ASK · DEFER · ESCALATE · REFUSE</text>
+  <text x="748" y="585" class="m s">No write · no execution receipt</text>
+
+  <rect x="320" y="500" rx="18" ry="18" width="300" height="125" class="box green"/>
+  <text x="345" y="542" class="t b">Atomic Postgres transaction</text>
+  <text x="345" y="580" class="m s">Receipt + audit commit together</text>
+  <line x1="1130" y1="360" x2="620" y2="535" stroke="#a6ff1f" stroke-width="2" stroke-dasharray="8 8"/>
+
+  <rect x="320" y="665" rx="18" ry="18" width="300" height="95" class="box"/>
+  <text x="345" y="705" class="t b">Execution receipt</text>
+  <text x="345" y="738" class="m s">Created only on EXECUTE</text>
+
+  <rect x="720" y="665" rx="18" ry="18" width="330" height="95" class="box"/>
+  <text x="748" y="705" class="t b">SHA-256 linked audit ledger</text>
+  <text x="748" y="738" class="m s">Canonical hashes · independently verifiable</text>
+
+  <line x1="470" y1="625" x2="470" y2="660" stroke="#a6ff1f" stroke-width="2"/>
+  <line x1="620" y1="562" x2="885" y2="660" stroke="#a6ff1f" stroke-width="2"/>
+
+  <rect x="1130" y="665" rx="18" ry="18" width="200" height="95" class="box blue"/>
+  <text x="1155" y="705" class="t b">Read-only replay</text>
+  <text x="1155" y="738" class="m s">No side effects</text>
+  <line x1="1050" y1="713" x2="1125" y2="713" stroke="#59beff" stroke-width="2"/>
+  <polygon points="1130,713 1115,704 1115,722" fill="#59beff"/>
+
+  <text x="70" y="795" class="m s">Core principle: Confidence is evidence. Never authority. · The model proposes; the gate decides.</text>
+</svg>
