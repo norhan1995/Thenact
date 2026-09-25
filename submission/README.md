@@ -10,6 +10,7 @@ This folder contains the judge-facing deliverables for **ThenAct — The Decisio
 
 - Live app: https://thenact.vercel.app
 - Repository: https://github.com/norhan1995/Thenact
+- Final demo video: https://share.descript.com/view/NmJhpzmYOp7
 
 ## Flagship demo
 
