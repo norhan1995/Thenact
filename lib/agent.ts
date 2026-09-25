@@ -28,11 +28,7 @@ const AgentExtractSchema = z.object({
 
 type AgentExtract = z.infer<typeof AgentExtractSchema>;
 
-const FREE_MODELS = [
-  'inclusionai/ling-3.0-tiny:free',
-  'poolside/laguna-s-2.1:free',
-  'openrouter/free',
-] as const;
+const MODEL = 'google/gemma-4-26b-a4b-it:free';
 
 const SYSTEM_PROMPT =
   'You are an action-proposal interpreter, not an authorization system. ' +
@@ -49,105 +45,50 @@ function knownBoolean(value: AgentExtract['evidenceFresh']) {
   return value === 'yes' ? true : value === 'no' ? false : undefined;
 }
 
-function parseModelJson(content: string) {
-  const trimmed = content.trim();
-  const withoutFence = trimmed
-    .replace(/^\`\`\`(?:json)?\s*/i, '')
-    .replace(/\s*\`\`\`$/i, '')
-    .trim();
-
-  const firstBrace = withoutFence.indexOf('{');
-  const lastBrace = withoutFence.lastIndexOf('}');
-  if (firstBrace < 0 || lastBrace <= firstBrace) {
-    throw new Error('Model response did not contain a JSON object.');
-  }
-
-  return AgentExtractSchema.parse(
-    JSON.parse(withoutFence.slice(firstBrace, lastBrace + 1))
-  );
-}
-
 async function extractWithOpenRouter(instruction: string): Promise<AgentExtract> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured.');
 
-  const failures: string[] = [];
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
 
-  for (const model of FREE_MODELS) {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://thenact.vercel.app',
+        'X-OpenRouter-Title': 'ThenAct',
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        temperature: 0,
+        max_tokens: 700,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: instruction },
+        ],
+      }),
+    });
 
-      let response: Response;
-      try {
-        response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          signal: controller.signal,
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://thenact.vercel.app',
-            'X-OpenRouter-Title': 'ThenAct',
-          },
-          body: JSON.stringify({
-            model,
-            temperature: 0,
-            max_tokens: 450,
-            messages: [
-              {
-                role: 'system',
-                content:
-                  SYSTEM_PROMPT +
-                  ' Do not include reasoning, markdown, code fences, or commentary. Output the JSON object only.',
-              },
-              { role: 'user', content: instruction },
-            ],
-          }),
-        });
-      } finally {
-        clearTimeout(timeout);
-      }
-
-      if (!response.ok) {
-        const body = await response.text();
-        failures.push(`${model}: HTTP ${response.status} ${body.slice(0, 180)}`);
-
-        if (response.status === 401 || response.status === 403) {
-          throw new Error(`OpenRouter authorization failed (${response.status}).`);
-        }
-        continue;
-      }
-
-      const payload = (await response.json()) as {
-        choices?: Array<{ message?: { content?: string | null } }>;
-      };
-      const content = payload.choices?.[0]?.message?.content;
-      if (!content) {
-        failures.push(`${model}: empty response`);
-        continue;
-      }
-
-      try {
-        return parseModelJson(content);
-      } catch (error) {
-        failures.push(
-          `${model}: invalid JSON contract (${
-            error instanceof Error ? error.message : 'unknown parse error'
-          })`
-        );
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'unknown request error';
-      if (message.includes('authorization failed')) throw error;
-      failures.push(`${model}: ${message}`);
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`OpenRouter request failed (${response.status}): ${body.slice(0, 500)}`);
     }
-  }
 
-  throw new Error(
-    `All free OpenRouter models were unavailable or invalid. ${failures
-      .slice(0, 5)
-      .join(' | ')}`
-  );
+    const payload = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string | null } }>;
+    };
+    const text = payload.choices?.[0]?.message?.content;
+    if (!text) throw new Error('OpenRouter returned no proposal text.');
+
+    return AgentExtractSchema.parse(JSON.parse(text));
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function interpretAgentInstruction(instruction: string): Promise<AgentProposal> {
@@ -172,29 +113,22 @@ export async function interpretAgentInstruction(instruction: string): Promise<Ag
     if (raw.amount >= 0) context.amount = raw.amount;
     if (raw.orderAgeDays >= 0) context.orderAgeDays = raw.orderAgeDays;
     if (raw.fraudScore >= 0) context.fraudScore = raw.fraudScore;
-
     const receipt = knownBoolean(raw.receiptVerified);
     if (receipt !== undefined) context.receiptVerified = receipt;
-
     const approval = knownBoolean(raw.approvalVerified);
     if (approval !== undefined) context.approvalVerified = approval;
-
     const forged = knownBoolean(raw.forgedApproval);
     if (forged !== undefined) context.forgedApproval = forged;
   }
 
   if (raw.domain === 'code_deploy') {
     if (raw.environment !== 'unknown') context.environment = raw.environment;
-
     const tests = knownBoolean(raw.testsPassed);
     if (tests !== undefined) context.testsPassed = tests;
-
     const rollback = knownBoolean(raw.rollbackReady);
     if (rollback !== undefined) context.rollbackReady = rollback;
-
     const migration = knownBoolean(raw.databaseMigration);
     if (migration !== undefined) context.databaseMigration = migration;
-
     const bypass = knownBoolean(raw.bypassRequested);
     if (bypass !== undefined) context.bypassRequested = bypass;
   }
