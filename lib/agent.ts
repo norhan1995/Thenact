@@ -84,6 +84,26 @@ function knownBoolean(value: AgentExtract['evidenceFresh']) {
   return value === 'yes' ? true : value === 'no' ? false : undefined;
 }
 
+function parseToolArguments(args: string): AgentExtract {
+  const candidates = [
+    args,
+    args.replace(/,\s*([}\]])/g, '$1'),
+  ];
+
+  let lastError: unknown;
+  for (const candidate of candidates) {
+    try {
+      return AgentExtractSchema.parse(JSON.parse(candidate));
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('Tool arguments were not valid JSON.');
+}
+
 async function extractWithOpenRouter(instruction: string): Promise<AgentExtract> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured.');
@@ -153,7 +173,7 @@ async function extractWithOpenRouter(instruction: string): Promise<AgentExtract>
       }
 
       try {
-        return AgentExtractSchema.parse(JSON.parse(args));
+        return parseToolArguments(args);
       } catch (error) {
         failures.push(
           `attempt ${attempt}: invalid proposal arguments (${
