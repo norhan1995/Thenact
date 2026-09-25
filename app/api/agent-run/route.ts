@@ -21,6 +21,16 @@ export async function POST(request: Request) {
       );
     }
 
+    if (!process.env.OPENROUTER_API_KEY) {
+      return NextResponse.json(
+        {
+          error:
+            'Agent Mode needs an OpenRouter API key. OpenRouter free models require no payment card. No action was attempted.',
+        },
+        { status: 503 }
+      );
+    }
+
     const proposal = await interpretAgentInstruction(body.instruction.trim());
     const evaluation = evaluate(proposal.domain, proposal.action, proposal.context);
     const decision = await persistDecision({
@@ -34,19 +44,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ proposal, decision });
   } catch (error) {
     console.error('agent_run_error', error);
-
-    const message = error instanceof Error ? error.message : '';
-    const needsGatewayVerification =
-      message.includes('valid credit card on file') ||
-      message.includes('customer_verification_required');
-
     return NextResponse.json(
       {
-        error: needsGatewayVerification
-          ? 'AI Gateway is not enabled for this Vercel account yet. Add a payment card in Vercel AI settings to unlock Gateway credits. No action was attempted.'
-          : 'The AI proposer could not produce a safe structured proposal. No action was attempted.',
+        error:
+          'The free AI proposer could not produce a safe structured proposal. No action was attempted.',
       },
-      { status: needsGatewayVerification ? 503 : 502 }
+      { status: 502 }
     );
   }
 }
