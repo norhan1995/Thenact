@@ -75,7 +75,9 @@ export async function persistDecision(args: {
       };
     }
 
-    const timestamp = new Date().toISOString();
+    // Hash the exact timestamp representation that Postgres will round-trip.
+    // Whole-second precision avoids driver/database serialization drift.
+    const timestamp = new Date(Math.floor(Date.now() / 1000) * 1000).toISOString();
     const base = {
       domain: args.domain,
       action: args.action,
