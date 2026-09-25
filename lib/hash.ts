@@ -10,8 +10,28 @@ export interface HashableAuditBase extends Evaluation {
   previousHash: string;
 }
 
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalize);
+  }
+
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, nested]) => [key, canonicalize(nested)])
+    );
+  }
+
+  return value;
+}
+
+export function stableStringify(value: unknown) {
+  return JSON.stringify(canonicalize(value));
+}
+
 export function auditPayload(record: HashableAuditBase) {
-  return JSON.stringify({
+  return stableStringify({
     domain: record.domain,
     action: record.action,
     context: record.context,
