@@ -48,6 +48,7 @@ export interface AuditRecord extends Evaluation {
 }
 
 export interface AgentProposal {
+  source: 'model' | 'safe_fallback';
   domain: string;
   action: string;
   context: Context;
