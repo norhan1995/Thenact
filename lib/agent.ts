@@ -245,8 +245,117 @@ async function extractWithOpenRouter(instruction: string): Promise<AgentExtract>
   );
 }
 
+function fallbackExtract(instruction: string): AgentExtract {
+  const text = instruction.toLowerCase();
+  const sourceFacts: string[] = [];
+  const warnings = [
+    'Free model inference was unavailable; ThenAct used its conservative local extractor.',
+    'Fallback extraction can only recognize the three supported demo domains and never grants authority.',
+  ];
+
+  let domain: AgentExtract['domain'];
+  let action: AgentExtract['action'];
+
+  if (/refund|reimburse|money back/.test(text)) {
+    domain = 'refund_approval';
+    action = 'approve_refund';
+  } else if (/deploy|release|production|staging/.test(text)) {
+    domain = 'code_deploy';
+    action = 'deploy_release';
+  } else {
+    domain = 'ticket_triage';
+    action = 'route_ticket';
+  }
+
+  const amountMatch = instruction.match(/(?:\$|usd\s*)\s*([\d,]+(?:\.\d+)?)/i);
+  const fraudMatch = instruction.match(/fraud\s*(?:score)?\s*(?:is|=|:)?\s*(0(?:\.\d+)?|1(?:\.0+)?)/i);
+  const ageMatch = instruction.match(/(?:order\s+is\s+|order\s+age\s*(?:is|=|:)?\s*)(\d+)\s*days?/i);
+
+  const forged = /forged|fake|invalid\s+approval|approval\s+is\s+invalid/.test(text);
+  const approvalVerified =
+    /(?:approval|token|authority).{0,30}\bverified\b/.test(text) && !forged;
+  const receiptVerified =
+    /receipt.{0,20}\bverified\b/.test(text) && !/receipt.{0,20}(?:not|unverified)/.test(text);
+  const evidenceFresh = /evidence.{0,20}\bfresh\b|fresh\s+evidence/.test(text);
+  const evidenceStale = /evidence.{0,20}\bstale\b|stale\s+evidence/.test(text);
+  const bypass = /proceed\s+anyway|bypass|ignore\s+(?:the\s+)?policy|skip\s+(?:the\s+)?(?:gate|check|policy)/.test(text);
+
+  if (amountMatch) sourceFacts.push('Refund amount was stated explicitly.');
+  if (receiptVerified) sourceFacts.push('Receipt was stated as verified.');
+  if (fraudMatch) sourceFacts.push('Fraud score was stated explicitly.');
+  if (ageMatch) sourceFacts.push('Order age was stated explicitly.');
+  if (forged) sourceFacts.push('Approval was explicitly described as forged or invalid.');
+  if (evidenceFresh) sourceFacts.push('Evidence was explicitly described as fresh.');
+  if (evidenceStale) sourceFacts.push('Evidence was explicitly described as stale.');
+  if (bypass) sourceFacts.push('Instruction explicitly asked to proceed despite a control.');
+
+  const category =
+    /password[\s_-]*reset/.test(text) ? 'password_reset' :
+    /billing/.test(text) ? 'billing' :
+    /technical|tech\s+support/.test(text) ? 'technical_support' :
+    'unknown';
+
+  const containsSensitiveData =
+    /no\s+sensitive\s+data|contains?\s+no\s+sensitive/.test(text) ? 'no' :
+    /contains?\s+sensitive\s+data|sensitive\s+data\s+(?:is\s+)?present/.test(text) ? 'yes' :
+    'unknown';
+
+  const environment =
+    /\bproduction\b/.test(text) ? 'production' :
+    /\bstaging\b/.test(text) ? 'staging' :
+    /\bdevelopment\b|\bdev\b/.test(text) ? 'development' :
+    'unknown';
+
+  const testsPassed =
+    /tests?\s+(?:have\s+)?passed|tests?\s+pass/.test(text) ? 'yes' :
+    /tests?\s+(?:have\s+)?failed|tests?\s+fail/.test(text) ? 'no' :
+    'unknown';
+
+  const rollbackReady =
+    /rollback.{0,20}(?:not\s+ready|isn't\s+ready|is\s+not\s+ready)/.test(text) ? 'no' :
+    /rollback.{0,20}\bready\b/.test(text) ? 'yes' :
+    'unknown';
+
+  return {
+    domain,
+    action,
+    confidence: 0.55,
+    rationale:
+      'A conservative local extractor mapped only explicit language into the supported action schema after external free inference was unavailable.',
+    category,
+    containsSensitiveData,
+    customerTier: /\bvip\b/.test(text) ? 'vip' : /\bstandard\b/.test(text) ? 'standard' : 'unknown',
+    amount: amountMatch ? Number(amountMatch[1].replace(/,/g, '')) : -1,
+    receiptVerified: receiptVerified ? 'yes' : /receipt.{0,20}(?:not\s+verified|unverified)/.test(text) ? 'no' : 'unknown',
+    orderAgeDays: ageMatch ? Number(ageMatch[1]) : -1,
+    fraudScore: fraudMatch ? Number(fraudMatch[1]) : -1,
+    approvalVerified: approvalVerified ? 'yes' : forged ? 'no' : 'unknown',
+    forgedApproval: forged ? 'yes' : 'unknown',
+    evidenceFresh: evidenceFresh ? 'yes' : evidenceStale ? 'no' : 'unknown',
+    environment,
+    testsPassed,
+    rollbackReady,
+    databaseMigration: /database\s+migration|db\s+migration/.test(text) ? 'yes' : 'unknown',
+    bypassRequested: bypass ? 'yes' : 'unknown',
+    sourceFacts,
+    warnings,
+  };
+}
+
 export async function interpretAgentInstruction(instruction: string): Promise<AgentProposal> {
-  const raw = await extractWithOpenRouter(instruction);
+  let raw: AgentExtract;
+  let source: AgentProposal['source'] = 'model';
+
+  try {
+    raw = await extractWithOpenRouter(instruction);
+  } catch (error) {
+    console.warn(
+      'agent_provider_fallback',
+      error instanceof Error ? error.message : 'free inference unavailable'
+    );
+    raw = fallbackExtract(instruction);
+    source = 'safe_fallback';
+  }
   const context: Context = {
     modelConfidence: Math.max(0.05, Math.min(0.99, raw.confidence)),
   };
@@ -288,6 +397,7 @@ export async function interpretAgentInstruction(instruction: string): Promise<Ag
   }
 
   return {
+    source,
     domain: raw.domain,
     action: raw.action,
     context,
