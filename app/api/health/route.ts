@@ -19,6 +19,7 @@ export async function GET() {
     }
   }
 
+  const aiConfigured = Boolean(process.env.OPENROUTER_API_KEY);
   const ok = databaseConfigured && databaseReady;
 
   return NextResponse.json(
@@ -29,11 +30,8 @@ export async function GET() {
       databaseConfigured,
       databaseReady,
       databaseError,
-      aiGatewayAuth: process.env.VERCEL
-        ? 'vercel-oidc'
-        : Boolean(process.env.AI_GATEWAY_API_KEY)
-          ? 'api-key'
-          : 'missing-local-auth',
+      aiProvider: 'openrouter-free',
+      aiConfigured,
     },
     { status: ok ? 200 : 503 }
   );
