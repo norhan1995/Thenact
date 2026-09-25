@@ -48,4 +48,27 @@ describe('audit hash', () => {
     };
     expect(hashAuditRecord(first)).not.toBe(hashAuditRecord(second));
   });
+
+  it('is stable across JSON object key reordering', () => {
+    const first = base();
+    const second = {
+      ...base(),
+      context: {
+        evidenceFresh: true,
+        customerTier: 'standard',
+        containsSensitiveData: false,
+        category: 'password_reset',
+        modelConfidence: 0.94,
+      },
+      enforcement: {
+        message: 'Authorized write executed and receipt created.',
+        receiptId: 'receipt-1',
+        status: 'executed' as const,
+        executed: true,
+        attempted: true as const,
+      },
+    };
+
+    expect(hashAuditRecord(first)).toBe(hashAuditRecord(second));
+  });
 });
