@@ -59,12 +59,7 @@ const TOOL_PARAMETERS = {
     sourceFacts: { type: 'array', items: { type: 'string' }, maxItems: 12 },
     warnings: { type: 'array', items: { type: 'string' }, maxItems: 12 },
   },
-  required: [
-    'domain','action','confidence','rationale','category','containsSensitiveData',
-    'customerTier','amount','receiptVerified','orderAgeDays','fraudScore',
-    'approvalVerified','forgedApproval','evidenceFresh','environment','testsPassed',
-    'rollbackReady','databaseMigration','bypassRequested','sourceFacts','warnings'
-  ],
+  required: ['domain', 'action', 'confidence', 'rationale'],
 };
 
 const SYSTEM_PROMPT =
@@ -78,6 +73,78 @@ const SYSTEM_PROMPT =
 
 function knownBoolean(value: AgentExtract['evidenceFresh']) {
   return value === 'yes' ? true : value === 'no' ? false : undefined;
+}
+
+function normalizeKnown(value: unknown): 'yes' | 'no' | 'unknown' {
+  if (value === true || value === 'yes') return 'yes';
+  if (value === false || value === 'no') return 'no';
+  return 'unknown';
+}
+
+function normalizeString(value: unknown, fallback = 'unknown') {
+  return typeof value === 'string' && value.trim() ? value : fallback;
+}
+
+function normalizeNumber(value: unknown, fallback = -1) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) {
+    return Number(value);
+  }
+  return fallback;
+}
+
+function normalizeToolArguments(args: string): AgentExtract {
+  const repaired = args.replace(/,\s*([}\]])/g, '$1');
+  const parsed = JSON.parse(repaired) as Record<string, unknown>;
+
+  const core = z.object({
+    domain: z.enum(['ticket_triage', 'refund_approval', 'code_deploy']),
+    action: z.enum(['route_ticket', 'approve_refund', 'deploy_release']),
+  }).passthrough().parse(parsed);
+
+  const customerTier =
+    core.customerTier === 'standard' || core.customerTier === 'vip'
+      ? core.customerTier
+      : 'unknown';
+
+  const environment =
+    core.environment === 'production' ||
+    core.environment === 'staging' ||
+    core.environment === 'development'
+      ? core.environment
+      : 'unknown';
+
+  const sourceFacts = Array.isArray(core.sourceFacts)
+    ? core.sourceFacts.filter((item): item is string => typeof item === 'string').slice(0, 12)
+    : [];
+
+  const warnings = Array.isArray(core.warnings)
+    ? core.warnings.filter((item): item is string => typeof item === 'string').slice(0, 12)
+    : [];
+
+  return AgentExtractSchema.parse({
+    domain: core.domain,
+    action: core.action,
+    confidence: Math.max(0, Math.min(1, normalizeNumber(core.confidence, 0.5))),
+    rationale: normalizeString(core.rationale, 'AI extracted a structured action proposal.'),
+    category: normalizeString(core.category),
+    containsSensitiveData: normalizeKnown(core.containsSensitiveData),
+    customerTier,
+    amount: normalizeNumber(core.amount),
+    receiptVerified: normalizeKnown(core.receiptVerified),
+    orderAgeDays: normalizeNumber(core.orderAgeDays),
+    fraudScore: normalizeNumber(core.fraudScore),
+    approvalVerified: normalizeKnown(core.approvalVerified),
+    forgedApproval: normalizeKnown(core.forgedApproval),
+    evidenceFresh: normalizeKnown(core.evidenceFresh),
+    environment,
+    testsPassed: normalizeKnown(core.testsPassed),
+    rollbackReady: normalizeKnown(core.rollbackReady),
+    databaseMigration: normalizeKnown(core.databaseMigration),
+    bypassRequested: normalizeKnown(core.bypassRequested),
+    sourceFacts,
+    warnings,
+  });
 }
 
 async function extractWithOpenRouter(instruction: string): Promise<AgentExtract> {
@@ -154,7 +221,7 @@ async function extractWithOpenRouter(instruction: string): Promise<AgentExtract>
       }
 
       try {
-        return AgentExtractSchema.parse(JSON.parse(args));
+        return normalizeToolArguments(args);
       } catch (error) {
         failures.push(
           `${model}: invalid tool arguments (${
