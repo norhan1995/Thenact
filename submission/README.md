@@ -2,7 +2,9 @@
 
 This folder contains the judge-facing deliverables for **ThenAct — The Decision Engine**.
 
-- [Architecture](./ARCHITECTURE.md)
+- [Final submission packet](./FINAL_SUBMISSION.md)
+- [Architecture snapshot](./ARCHITECTURE.svg)
+- [Architecture notes](./ARCHITECTURE.md)
 - [Deliberate failure test](./FAILURE_TEST.md)
 - [Two-year thesis](./TWO_YEAR_THESIS.md)
 
@@ -13,11 +15,13 @@ This folder contains the judge-facing deliverables for **ThenAct — The Decisio
 
 ## Final demo video
 
-The final 90-second MP4 is packaged separately for the DOO submission. Use the finished file named:
+Use the finished file:
 
-`ThenAct_90s_DOO_Demo_SUBMIT.mp4`
+`ThenAct_90s_DOO_Demo_SUBMIT_FINAL.mp4`
 
-Upload that file to Loom and paste the Loom share URL into the submission form.
+Verified duration: **89.5 seconds**.
+
+The final render uses the natural narration track, full-runtime branded ThenAct visuals, H.264 video and AAC audio. Upload it directly to the submission form, or to Loom only if the form specifically requires a share URL.
 
 ## Flagship demo
 
@@ -25,6 +29,10 @@ Run the forged-refund example in Agent Mode.
 
 Expected result:
 
-**REFUSE → WRITE PREVENTED**
+**REFUSE → WRITE PREVENTED → no execution receipt**
 
 Then open the Audit Ledger and show the verified SHA-256 chain.
+
+## Core principle
+
+**Confidence is evidence. Never authority.**
