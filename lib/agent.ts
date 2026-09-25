@@ -29,8 +29,9 @@ const AgentExtractSchema = z.object({
 type AgentExtract = z.infer<typeof AgentExtractSchema>;
 
 const FREE_MODELS = [
+  'inclusionai/ling-3.0-tiny:free',
+  'poolside/laguna-s-2.1:free',
   'openrouter/free',
-  'inclusionai/ling-3.0-flash:free',
 ] as const;
 
 const SYSTEM_PROMPT =
@@ -91,7 +92,7 @@ async function extractWithOpenRouter(instruction: string): Promise<AgentExtract>
           body: JSON.stringify({
             model,
             temperature: 0,
-            max_tokens: 600,
+            max_tokens: 450,
             messages: [
               {
                 role: 'system',
