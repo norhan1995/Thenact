@@ -1,83 +1,71 @@
 # Vercel Deployment Guide
 
-This repository is already structured for Vercel's Next.js runtime.
+ThenAct is structured for Vercel's Next.js runtime.
 
-## 1. Create the Vercel project
+## 1. Import the repository
 
-Import the GitHub repository into Vercel and keep the defaults:
+Use:
 
-- Framework Preset: **Next.js**
-- Root Directory: repository root
-- Build Command: `next build`
-- Node.js: **22+**
+- Framework: **Next.js**
+- Root directory: repository root
+- Node.js: **22.x**
+- Production branch: **main**
 
 No `vercel.json` override is required.
 
-## 2. Provision Postgres
+## 2. Connect Neon
 
 In the Vercel project:
 
-**Storage / Marketplace → Neon → Add to project**
+**Storage / Marketplace → Neon → Connect to project**
 
-The Neon integration provides `DATABASE_URL` to the Vercel project.
+The integration provides `DATABASE_URL`.
 
-Open the Neon SQL editor and execute:
+ThenAct calls `ensureSchema()` before database operations, so the required audit and execution tables are created automatically. `scripts/schema.sql` remains as a human-readable reference.
 
-`/scripts/schema.sql`
+## 3. Configure Agent Mode
 
-The audit and execution tables are intentionally separate. ThenAct inserts an EXECUTE receipt and its audit record inside one database transaction.
-
-## 3. AI Gateway
-
-The app uses the Vercel AI SDK with the model id:
-
-`openai/gpt-5.6-sol`
-
-On a Vercel deployment, prefer Vercel's OIDC authentication for AI Gateway. This keeps model credentials out of source and Git history.
-
-For local development only, you can put this in `.env.local`:
+Create a free OpenRouter API key and add:
 
 ```bash
-AI_GATEWAY_API_KEY=your_key_here
-DATABASE_URL=your_neon_connection_string
+OPENROUTER_API_KEY=...
 ```
 
-Never commit `.env.local`.
+to the Vercel project environments you intend to use.
 
-## 4. Verify before using the submission URL
+ThenAct uses free external inference for natural-language proposal extraction. If the shared free pool is temporarily unavailable or produces unusable output, the system degrades to a conservative local extractor and labels that path as **SAFE FALLBACK** in the UI. Authorization remains deterministic in both cases.
+
+## 4. Verify
 
 Open:
 
 `/api/health`
 
-Expected:
+Expected fields include:
 
 ```json
 {
   "ok": true,
   "product": "ThenAct",
   "databaseConfigured": true,
-  "aiGatewayAuth": "vercel-oidc"
+  "databaseReady": true,
+  "aiProvider": "openrouter-free",
+  "aiConfigured": true
 }
 ```
 
-Then run these checks in the UI:
+Then verify in the UI:
 
-1. **Agent Mode → Forged refund** → must return REFUSE + WRITE PREVENTED.
-2. **Clear ticket** → must return EXECUTE + execution receipt.
-3. **Ambiguous ticket** → must return ASK.
-4. **Stale fraud feed** → must return DEFER.
-5. **Production deploy** → must return ESCALATE.
-6. **Audit Ledger** → visible chain must show VERIFIED.
-7. Replay the newest decision → must not create a new execution receipt.
+1. Forged refund → **REFUSE + WRITE PREVENTED**
+2. Clear ticket → **EXECUTE + execution receipt**
+3. Ambiguous ticket → **ASK**
+4. Stale fraud feed → **DEFER**
+5. Risky production deployment → **ESCALATE**
+6. Audit Ledger → **VERIFIED**
+7. Replay → no new execution receipt
 
-## 5. Submission deployment workflow
+## 5. Submission workflow
 
-Recommended:
+Use GitHub `main` as the production source of truth. Validate changes through CI and Vercel before using the production URL in the submission.
 
-1. Push `main` → Vercel production deployment.
-2. Use branches/PRs for any final changes so Vercel creates Preview deployments.
-3. Validate the Preview.
-4. Merge/promote only the validated artifact.
-
-Keep the older AppDeploy URL as a backup, but use the Vercel production URL in the final DOO submission.
+Production URL: **https://thenact.vercel.app**

@@ -2,19 +2,19 @@
 
 ## 0–8s — Thesis
 
-“AI can propose an action. It should not be able to grant itself permission. ThenAct separates intelligence from authority.”
+“AI can propose an action. It should not be able to grant itself permission. ThenAct separates interpretation from authority.”
 
 ## 8–30s — Flagship Agent Mode
 
 Use **Forged refund** and click **Run agent through ThenAct**.
 
-Point to:
+Point to the three stages:
 
-1. **AI PROPOSAL** — refund intent and explicit facts are extracted.
-2. **THENACT INTERCEPT** — forged authority is checked before confidence.
-3. **ENFORCEMENT** — REFUSE, WRITE PREVENTED.
+1. **AI PROPOSAL** — or **SAFE FALLBACK** if the shared free provider is unavailable
+2. **THENACT INTERCEPT** — forged authority is checked before confidence
+3. **ENFORCEMENT** — REFUSE, WRITE PREVENTED
 
-Say: “The model can understand the task. It cannot authorize itself.”
+Say: “The proposer can understand the task. It cannot authorize itself.”
 
 ## 30–43s — Five outcomes
 
@@ -36,13 +36,13 @@ Open Audit Ledger.
 
 Show **VERIFIED** SHA-256 chain, then Replay.
 
-“Execution and audit commit together. Historical inputs can be replayed without causing side effects.”
+“Execution and audit commit together. Historical inputs can be replayed without side effects.”
 
 ## 72–84s — Architecture
 
 Open Architecture.
 
-“Natural language enters an AI proposer. Structured intent hits a deterministic control plane. The model interprets; ThenAct authorizes.”
+“The proposal layer is probabilistic. Permission is deterministic. Provider failure degrades safely instead of bypassing the gate.”
 
 ## 84–90s — Close
 
