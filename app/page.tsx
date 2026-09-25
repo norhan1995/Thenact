@@ -354,7 +354,7 @@ export default function Home() {
                 </div>
 
                 <div className="pipeline">
-                  <Stage n="1" icon={Sparkles} label="AI PROPOSAL" title={proposal ? pretty(proposal.domain) : 'Interpret intent'} body={proposal ? `${proposal.action} · ${proposal.confidence}% proposal confidence` : 'Extract only explicit facts.'} live={Boolean(proposal)} />
+                  <Stage n="1" icon={Sparkles} label={proposal?.source === 'safe_fallback' ? 'SAFE FALLBACK' : 'AI PROPOSAL'} title={proposal ? pretty(proposal.domain) : 'Interpret intent'} body={proposal ? `${proposal.action} · ${proposal.confidence}% proposal confidence` : 'Extract only explicit facts.'} live={Boolean(proposal)} />
                   <ChevronRight className="flowArrow" />
                   <Stage n="2" icon={ShieldCheck} label="THENACT INTERCEPT" title={result ? outcomeMeta[result.decision].label : 'Authorize'} body={result ? result.reasonCodes.join(' · ') : 'Deterministic policy owns the decision.'} live={Boolean(result)} />
                   <ChevronRight className="flowArrow" />
@@ -364,7 +364,7 @@ export default function Home() {
                 {proposal && (
                   <div className="proposalMeta">
                     <Meta label="SOURCE FACTS" text={proposal.sourceFacts.join(' · ') || 'No explicit facts extracted.'} />
-                    <Meta label="AI RATIONALE" text={proposal.rationale} />
+                    <Meta label={proposal.source === 'safe_fallback' ? 'FALLBACK RATIONALE' : 'AI RATIONALE'} text={proposal.rationale} />
                     <Meta label="UNCERTAINTY" text={proposal.warnings.join(' · ') || 'No extraction warnings.'} />
                   </div>
                 )}
