@@ -39,10 +39,23 @@ export async function persistDecision(args: {
   return withDbTransaction(async client => {
     await client.query('SELECT pg_advisory_xact_lock($1)', [903140271]);
 
-    const previous = await client.query(
-      'SELECT record_hash FROM thenact_audit ORDER BY created_at DESC, id DESC LIMIT 1'
+    const heads = await client.query(
+      `SELECT a.record_hash
+       FROM thenact_audit a
+       WHERE NOT EXISTS (
+         SELECT 1 FROM thenact_audit child
+         WHERE child.previous_hash = a.record_hash
+       )
+       LIMIT 2`
     );
-    const previousHash = String((previous.rows[0] as { record_hash?: string } | undefined)?.record_hash ?? 'GENESIS');
+
+    if (heads.rows.length > 1) {
+      throw new Error('Audit ledger has multiple heads; refusing to append until integrity is restored.');
+    }
+
+    const previousHash = String(
+      (heads.rows[0] as { record_hash?: string } | undefined)?.record_hash ?? 'GENESIS'
+    );
 
     let enforcement: Enforcement;
     if (!args.enforce) {
@@ -149,23 +162,63 @@ export async function getAudit(id: string) {
 }
 
 export function verifyVisibleChain(itemsNewestFirst: AuditRecord[]) {
-  const ordered = [...itemsNewestFirst].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-  if (ordered.length === 0) {
+  if (itemsNewestFirst.length === 0) {
     return { valid: true, checked: 0, anchorHash: 'GENESIS', headHash: 'GENESIS' };
   }
 
-  let valid = true;
-  for (let index = 0; index < ordered.length; index += 1) {
-    const current = ordered[index];
-    if (!verifyRecord(current)) valid = false;
-    if (index > 0 && current.previousHash !== ordered[index - 1].recordHash) valid = false;
+  const byHash = new Map(itemsNewestFirst.map(item => [item.recordHash, item]));
+  const referencedHashes = new Set(
+    itemsNewestFirst
+      .map(item => item.previousHash)
+      .filter(hash => hash !== 'GENESIS')
+  );
+
+  const heads = itemsNewestFirst.filter(item => !referencedHashes.has(item.recordHash));
+  let valid = heads.length === 1 && itemsNewestFirst.every(verifyRecord);
+
+  if (heads.length !== 1) {
+    return {
+      valid: false,
+      checked: itemsNewestFirst.length,
+      anchorHash: 'UNKNOWN',
+      headHash: heads[0]?.recordHash ?? 'UNKNOWN',
+    };
   }
+
+  const visited = new Set<string>();
+  let current: AuditRecord | undefined = heads[0];
+  let anchorHash = current.previousHash;
+
+  while (current) {
+    if (visited.has(current.recordHash)) {
+      valid = false;
+      break;
+    }
+
+    visited.add(current.recordHash);
+
+    if (current.previousHash === 'GENESIS') {
+      anchorHash = 'GENESIS';
+      break;
+    }
+
+    const predecessor = byHash.get(current.previousHash);
+    if (!predecessor) {
+      // A bounded visible window may start in the middle of a valid longer chain.
+      anchorHash = current.previousHash;
+      break;
+    }
+
+    current = predecessor;
+  }
+
+  if (visited.size !== itemsNewestFirst.length) valid = false;
 
   return {
     valid,
-    checked: ordered.length,
-    anchorHash: ordered[0].previousHash,
-    headHash: ordered[ordered.length - 1].recordHash,
+    checked: itemsNewestFirst.length,
+    anchorHash,
+    headHash: heads[0].recordHash,
   };
 }
 
