@@ -29,11 +29,8 @@ const AgentExtractSchema = z.object({
 type AgentExtract = z.infer<typeof AgentExtractSchema>;
 
 const FREE_MODELS = [
-  'poolside/laguna-s-2.1:free',
-  'nvidia/nemotron-3-ultra-550b-a55b:free',
-  'inclusionai/ling-3.0-flash-fin:free',
-  'google/gemma-4-31b-it:free',
-  'google/gemma-4-26b-a4b-it:free',
+  'openrouter/free',
+  'inclusionai/ling-3.0-flash:free',
 ] as const;
 
 const SYSTEM_PROMPT =
@@ -77,24 +74,38 @@ async function extractWithOpenRouter(instruction: string): Promise<AgentExtract>
 
   for (const model of FREE_MODELS) {
     try {
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://thenact.vercel.app',
-          'X-OpenRouter-Title': 'ThenAct',
-        },
-        body: JSON.stringify({
-          model,
-          temperature: 0,
-          max_tokens: 900,
-          messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: instruction },
-          ],
-        }),
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+
+      let response: Response;
+      try {
+        response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://thenact.vercel.app',
+            'X-OpenRouter-Title': 'ThenAct',
+          },
+          body: JSON.stringify({
+            model,
+            temperature: 0,
+            max_tokens: 600,
+            messages: [
+              {
+                role: 'system',
+                content:
+                  SYSTEM_PROMPT +
+                  ' Do not include reasoning, markdown, code fences, or commentary. Output the JSON object only.',
+              },
+              { role: 'user', content: instruction },
+            ],
+          }),
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
 
       if (!response.ok) {
         const body = await response.text();
