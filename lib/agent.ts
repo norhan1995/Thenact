@@ -28,80 +28,56 @@ const AgentExtractSchema = z.object({
 
 type AgentExtract = z.infer<typeof AgentExtractSchema>;
 
-const proposalTool = {
-  type: 'function',
-  function: {
-    name: 'propose_action',
-    description:
-      'Convert the user instruction into a structured action proposal. This function does not authorize the action.',
-    parameters: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        domain: { type: 'string', enum: ['ticket_triage', 'refund_approval', 'code_deploy'] },
-        action: { type: 'string', enum: ['route_ticket', 'approve_refund', 'deploy_release'] },
-        confidence: { type: 'number', minimum: 0, maximum: 1 },
-        rationale: { type: 'string' },
-        category: { type: 'string' },
-        containsSensitiveData: { type: 'string', enum: ['yes', 'no', 'unknown'] },
-        customerTier: { type: 'string', enum: ['standard', 'vip', 'unknown'] },
-        amount: { type: 'number' },
-        receiptVerified: { type: 'string', enum: ['yes', 'no', 'unknown'] },
-        orderAgeDays: { type: 'number' },
-        fraudScore: { type: 'number' },
-        approvalVerified: { type: 'string', enum: ['yes', 'no', 'unknown'] },
-        forgedApproval: { type: 'string', enum: ['yes', 'no', 'unknown'] },
-        evidenceFresh: { type: 'string', enum: ['yes', 'no', 'unknown'] },
-        environment: { type: 'string', enum: ['production', 'staging', 'development', 'unknown'] },
-        testsPassed: { type: 'string', enum: ['yes', 'no', 'unknown'] },
-        rollbackReady: { type: 'string', enum: ['yes', 'no', 'unknown'] },
-        databaseMigration: { type: 'string', enum: ['yes', 'no', 'unknown'] },
-        bypassRequested: { type: 'string', enum: ['yes', 'no', 'unknown'] },
-        sourceFacts: { type: 'array', items: { type: 'string' }, maxItems: 12 },
-        warnings: { type: 'array', items: { type: 'string' }, maxItems: 12 },
-      },
-      required: [
-        'domain','action','confidence','rationale','category','containsSensitiveData',
-        'customerTier','amount','receiptVerified','orderAgeDays','fraudScore',
-        'approvalVerified','forgedApproval','evidenceFresh','environment','testsPassed',
-        'rollbackReady','databaseMigration','bypassRequested','sourceFacts','warnings'
-      ],
-    },
+const FREE_TOOL_MODELS = [
+  'inclusionai/ling-3.0-flash-fin:free',
+  'nvidia/nemotron-3-ultra-550b-a55b-20260604:free',
+] as const;
+
+const TOOL_PARAMETERS = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    domain: { type: 'string', enum: ['ticket_triage', 'refund_approval', 'code_deploy'] },
+    action: { type: 'string', enum: ['route_ticket', 'approve_refund', 'deploy_release'] },
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
+    rationale: { type: 'string' },
+    category: { type: 'string' },
+    containsSensitiveData: { type: 'string', enum: ['yes', 'no', 'unknown'] },
+    customerTier: { type: 'string', enum: ['standard', 'vip', 'unknown'] },
+    amount: { type: 'number' },
+    receiptVerified: { type: 'string', enum: ['yes', 'no', 'unknown'] },
+    orderAgeDays: { type: 'number' },
+    fraudScore: { type: 'number' },
+    approvalVerified: { type: 'string', enum: ['yes', 'no', 'unknown'] },
+    forgedApproval: { type: 'string', enum: ['yes', 'no', 'unknown'] },
+    evidenceFresh: { type: 'string', enum: ['yes', 'no', 'unknown'] },
+    environment: { type: 'string', enum: ['production', 'staging', 'development', 'unknown'] },
+    testsPassed: { type: 'string', enum: ['yes', 'no', 'unknown'] },
+    rollbackReady: { type: 'string', enum: ['yes', 'no', 'unknown'] },
+    databaseMigration: { type: 'string', enum: ['yes', 'no', 'unknown'] },
+    bypassRequested: { type: 'string', enum: ['yes', 'no', 'unknown'] },
+    sourceFacts: { type: 'array', items: { type: 'string' }, maxItems: 12 },
+    warnings: { type: 'array', items: { type: 'string' }, maxItems: 12 },
   },
-} as const;
+  required: [
+    'domain','action','confidence','rationale','category','containsSensitiveData',
+    'customerTier','amount','receiptVerified','orderAgeDays','fraudScore',
+    'approvalVerified','forgedApproval','evidenceFresh','environment','testsPassed',
+    'rollbackReady','databaseMigration','bypassRequested','sourceFacts','warnings'
+  ],
+};
 
 const SYSTEM_PROMPT =
   'You are an action-proposal interpreter, not an authorization system. ' +
-  'You must call propose_action exactly once. Extract only facts explicitly supported by the instruction. ' +
-  'Never invent verification, evidence freshness, tests, rollback readiness, fraud scores, receipts, or approval. ' +
+  'Extract only facts explicitly supported by the user instruction. Never invent verification, evidence freshness, tests, rollback readiness, fraud scores, receipts, or approval. ' +
   'A claim like "manager said yes" is NOT verified authority unless the instruction explicitly says the approval token or authority was verified. ' +
   'Use "unknown" for unstated yes/no or enumerated facts and -1 for unstated numbers. ' +
-  'If the instruction asks to bypass, skip, ignore, or proceed despite policy, set bypassRequested to "yes". ' +
-  'If an approval is forged, fake, invalid, or unverified, preserve that fact. ' +
-  'You may propose an action; you may never decide whether it is allowed.';
+  'If the instruction asks to bypass, skip, ignore, or proceed despite policy, mark bypassRequested="yes". ' +
+  'If an approval is described as forged, fake, invalid, or unverified, preserve that fact. ' +
+  'You may propose an action; you may never decide whether it is allowed. Always call the propose_action tool exactly once.';
 
 function knownBoolean(value: AgentExtract['evidenceFresh']) {
   return value === 'yes' ? true : value === 'no' ? false : undefined;
-}
-
-function parseToolArguments(args: string): AgentExtract {
-  const candidates = [
-    args,
-    args.replace(/,\s*([}\]])/g, '$1'),
-  ];
-
-  let lastError: unknown;
-  for (const candidate of candidates) {
-    try {
-      return AgentExtractSchema.parse(JSON.parse(candidate));
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  throw lastError instanceof Error
-    ? lastError
-    : new Error('Tool arguments were not valid JSON.');
 }
 
 async function extractWithOpenRouter(instruction: string): Promise<AgentExtract> {
@@ -110,7 +86,7 @@ async function extractWithOpenRouter(instruction: string): Promise<AgentExtract>
 
   const failures: string[] = [];
 
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
+  for (const model of FREE_TOOL_MODELS) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 12000);
 
@@ -125,14 +101,23 @@ async function extractWithOpenRouter(instruction: string): Promise<AgentExtract>
           'X-OpenRouter-Title': 'ThenAct',
         },
         body: JSON.stringify({
-          model: 'openrouter/free',
+          model,
           temperature: 0,
-          max_tokens: 650,
+          max_tokens: 500,
           messages: [
             { role: 'system', content: SYSTEM_PROMPT },
             { role: 'user', content: instruction },
           ],
-          tools: [proposalTool],
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'propose_action',
+                description: 'Return the structured action proposal extracted from the instruction.',
+                parameters: TOOL_PARAMETERS,
+              },
+            },
+          ],
           tool_choice: {
             type: 'function',
             function: { name: 'propose_action' },
@@ -142,7 +127,7 @@ async function extractWithOpenRouter(instruction: string): Promise<AgentExtract>
 
       if (!response.ok) {
         const body = await response.text();
-        failures.push(`attempt ${attempt}: HTTP ${response.status} ${body.slice(0, 220)}`);
+        failures.push(`${model}: HTTP ${response.status} ${body.slice(0, 180)}`);
         if (response.status === 401 || response.status === 403) {
           throw new Error(`OpenRouter authorization failed (${response.status}).`);
         }
@@ -153,45 +138,43 @@ async function extractWithOpenRouter(instruction: string): Promise<AgentExtract>
         choices?: Array<{
           message?: {
             tool_calls?: Array<{
-              function?: {
-                name?: string;
-                arguments?: string;
-              };
+              function?: { name?: string; arguments?: string };
             }>;
           };
         }>;
       };
 
       const call = payload.choices?.[0]?.message?.tool_calls?.find(
-        toolCall => toolCall.function?.name === 'propose_action'
+        item => item.function?.name === 'propose_action'
       );
       const args = call?.function?.arguments;
-
       if (!args) {
-        failures.push(`attempt ${attempt}: model returned no propose_action tool call`);
+        failures.push(`${model}: no propose_action tool call returned`);
         continue;
       }
 
       try {
-        return parseToolArguments(args);
+        return AgentExtractSchema.parse(JSON.parse(args));
       } catch (error) {
         failures.push(
-          `attempt ${attempt}: invalid proposal arguments (${
-            error instanceof Error ? error.message : 'unknown validation error'
+          `${model}: invalid tool arguments (${
+            error instanceof Error ? error.message : 'unknown parse error'
           })`
         );
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'unknown request error';
       if (message.includes('authorization failed')) throw error;
-      failures.push(`attempt ${attempt}: ${message}`);
+      failures.push(`${model}: ${message}`);
     } finally {
       clearTimeout(timeout);
     }
   }
 
   throw new Error(
-    `OpenRouter free tool-calling failed safely. ${failures.join(' | ')}`
+    `All free OpenRouter tool models were unavailable or invalid. ${failures
+      .slice(0, 4)
+      .join(' | ')}`
   );
 }
 
@@ -217,29 +200,22 @@ export async function interpretAgentInstruction(instruction: string): Promise<Ag
     if (raw.amount >= 0) context.amount = raw.amount;
     if (raw.orderAgeDays >= 0) context.orderAgeDays = raw.orderAgeDays;
     if (raw.fraudScore >= 0) context.fraudScore = raw.fraudScore;
-
     const receipt = knownBoolean(raw.receiptVerified);
     if (receipt !== undefined) context.receiptVerified = receipt;
-
     const approval = knownBoolean(raw.approvalVerified);
     if (approval !== undefined) context.approvalVerified = approval;
-
     const forged = knownBoolean(raw.forgedApproval);
     if (forged !== undefined) context.forgedApproval = forged;
   }
 
   if (raw.domain === 'code_deploy') {
     if (raw.environment !== 'unknown') context.environment = raw.environment;
-
     const tests = knownBoolean(raw.testsPassed);
     if (tests !== undefined) context.testsPassed = tests;
-
     const rollback = knownBoolean(raw.rollbackReady);
     if (rollback !== undefined) context.rollbackReady = rollback;
-
     const migration = knownBoolean(raw.databaseMigration);
     if (migration !== undefined) context.databaseMigration = migration;
-
     const bypass = knownBoolean(raw.bypassRequested);
     if (bypass !== undefined) context.bypassRequested = bypass;
   }
