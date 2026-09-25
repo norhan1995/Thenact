@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { sql, withDbTransaction } from './db';
+import { ensureSchema, sql, withDbTransaction } from './db';
 import { hashAuditRecord, verifyRecord } from './hash';
 import type { AuditRecord, Context, Enforcement, Evaluation } from './types';
 
@@ -128,6 +128,7 @@ export async function persistDecision(args: {
 }
 
 export async function listAudit(limit = 50) {
+  await ensureSchema();
   const query = sql();
   const rows = await query.query(
     `SELECT * FROM thenact_audit ORDER BY created_at DESC, id DESC LIMIT $1`,
@@ -138,6 +139,7 @@ export async function listAudit(limit = 50) {
 }
 
 export async function getAudit(id: string) {
+  await ensureSchema();
   const query = sql();
   const rows = await query.query('SELECT * FROM thenact_audit WHERE id = $1 LIMIT 1', [id]);
   const row = rows[0];
@@ -166,6 +168,7 @@ export function verifyVisibleChain(itemsNewestFirst: AuditRecord[]) {
 }
 
 export async function executionCount() {
+  await ensureSchema();
   const query = sql();
   const rows = await query`SELECT COUNT(*)::int AS count FROM thenact_execution_receipts`;
   return Number(rows[0]?.count ?? 0);
