@@ -132,10 +132,12 @@ This is a hackathon-grade reference implementation. The demo uses three explicit
 
 Built for **The Decision Engine** mission.
 
-Deliverables live in `/docs`:
+Judge-ready deliverables live in [`/submission`](submission/README.md):
 
-- 90-second demo script
-- architecture
+- final submission packet
+- architecture snapshot + architecture notes
 - deliberate failure test
 - two-year thesis
-- submission copy
+- 89.5-second final demo asset instructions
+
+Supporting implementation notes and scripts remain in `/docs`.
